@@ -44,6 +44,7 @@ class ObjectPoseSampler(Module):
                        "each object. Type: Provider."
         "rot_sampler", "Here call an appropriate Provider (Sampler) in order to sample rotation (Euler angles 3d "
                        "vector) for each object. Type: Provider."
+        "extra_collision_objects", "additionally to the objects_to_sample, check collisions agains this objects"
     """
 
     def __init__(self, config):
@@ -53,16 +54,15 @@ class ObjectPoseSampler(Module):
         """
         Samples positions and rotations of selected object inside the sampling volume while performing mesh and
         bounding box collision checks in the following steps:
-        1. While we have objects remaining and have not run out of tries - sample a point. 
+        1. While we have objects remaining and have not run out of tries - sample a point.
         2. If no collisions are found keep the point.
         """
         # While we have objects remaining and have not run out of tries - sample a point
         # List of successfully placed objects
-        placed = []
         # After this many tries we give up on current object and continue with the rest
         max_tries = self.config.get_int("max_iterations", 1000)
         objects = self.config.get_list("objects_to_sample", get_all_mesh_objects())
-
+        placed = self.config.get_list("extra_collision_objects", [])
         # cache to fasten collision detection
         bvh_cache = {}
 
