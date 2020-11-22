@@ -1,5 +1,5 @@
 from glob import glob
-from random import choice
+from random import choice, choices
 
 from src.main.Provider import Provider
 from src.utility.Utility import Utility
@@ -21,6 +21,8 @@ class Path(Provider):
         :header: "Parameter", "Description"
 
         "path", "A path to a folder containing files. Type: string."
+        "sample_num", "Number of paths to return. If 1 return type "
+                      "is a string, otherwise a list."
     """
 
     def __init__(self, config):
@@ -37,7 +39,13 @@ class Path(Provider):
         # get list of paths
         paths = glob(path)
 
-        # chose a random one
-        chosen_path = choice(paths)
-
-        return chosen_path
+        sample_num = self.config.get_int("sample_num", 1)
+        if sample_num == 1:
+            # chose a random one
+            chosen_path = choice(paths)
+            return chosen_path
+        elif sample_num > 1:
+            chosen_paths = choices(paths, k=sample_num)
+            return chosen_paths
+        else:
+            raise RuntimeError("sample_num has to be greater than zero.")
