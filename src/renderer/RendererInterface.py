@@ -40,7 +40,7 @@ class RendererInterface(Module):
 
         "denoiser", "The denoiser to use. Set to 'Blender', if the Blender's built-in denoiser should be used or "
                     "set to 'Intel', if you want to use the Intel Open Image Denoiser, performs much better. "
-                    "Type: string. Default: "Intel" Available: ["Intel", "Blender"]."
+                    "Type: string. Default: "Intel" Available: ["Intel", "Blender", "OPTIX"]."
         "max_bounces", "Total maximum number of bounces. Type: int. Default: 3"
         "min_bounces", "Total minimum number of bounces. Type: int. Default: 1"
         "diffuse_bounces", "Maximum number of diffuse reflection bounces, bounded by total maximum. "
@@ -186,6 +186,9 @@ class RendererInterface(Module):
                 links.new(render_layer_node.outputs['Normal'], denoise_node.inputs['Normal'])
             elif denoiser.upper() == "BLENDER":
                 bpy.context.view_layer.cycles.use_denoising = True
+            elif denoiser.upper() == "OPTIX":
+                bpy.context.scene.cycles.use_denoising = True
+                bpy.context.scene.cycles.denoiser = "OPTIX"
             else:
                 raise Exception("No such denoiser: " + denoiser)
 
