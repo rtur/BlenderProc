@@ -6,6 +6,7 @@ if version_info.major == 2:
 import os
 import csv
 from urllib.request import urlretrieve, build_opener, install_opener
+from urllib.error import HTTPError
 import subprocess
 
 
@@ -19,10 +20,7 @@ if __name__ == "__main__":
     current_dir = os.path.dirname(os.path.abspath(__file__))
     cc_texture_dir = os.path.join(current_dir, "..", "resources", "cctextures")
 
-    if not os.path.exists(cc_texture_dir):
-        os.makedirs(cc_texture_dir)
-    else:
-        raise Exception("The folder already exists!")
+    os.makedirs(cc_texture_dir, exist_ok=True)
 
     # download the csv file, which contains all the download links
     csv_url = "https://cc0textures.com/api/v1/downloads_csv"
@@ -37,9 +35,12 @@ if __name__ == "__main__":
             if line["Filetype"] == "zip" and line["DownloadAttribute"] == "2K-JPG":
                 data[line["AssetID"]] = line["PrettyDownloadLink"]
 
-    excluding_list = ["sign", "roadlines", "manhole", "backdrop", "foliage", "TreeEnd", "TreeStump",
-                      "3DBread", "3DApple", "FlowerSet", "FoodSteps", "PineNeedles", "Grate",
-                      "PavingEdge", "Painting", "RockBrush", "WrinklesBrush", "Sticker", "3DRock"]
+    excluding_list = [
+        "Fingerprints", "ChristmasTreeOrnament", "ColdCuts", "PaymentCard",
+        "Leaf", "LeafSet", "sign", "roadlines", "manhole", "backdrop",
+        "foliage", "TreeEnd", "TreeStump", "3DBread", "3DApple", "FlowerSet",
+        "FoodSteps", "PineNeedles", "Grate", "PavingEdge", "Painting",
+        "RockBrush", "WrinklesBrush", "Sticker", "3DRock"]
 
     # download each asset and create a folder for it (unpacking + deleting the zip included)
     for index, (asset, link) in enumerate(data.items()):
@@ -51,13 +52,28 @@ if __name__ == "__main__":
         if do_not_use:
             continue
         print("Download asset: {} of {}/{}".format(asset, index, len(data)))
-        current_folder =  os.path.join(cc_texture_dir, asset)
-        if not os.path.exists(current_folder):
+        current_folder = os.path.join(cc_texture_dir, asset)
+        if os.path.exists(current_folder):
+            print("\tSkipping, it already exists")
+            continue
+        else:
             os.makedirs(current_folder)
         current_file_path = os.path.join(current_folder, "{}.zip".format(asset))
-        urlretrieve(link, current_file_path)
-        subprocess.call(["unzip {} -d {}> /dev/null".format(current_file_path, current_folder)], shell=True)
-        os.remove(current_file_path)
+
+        try:
+            urlretrieve(link, current_file_path)
+            subprocess.call(["unzip {} -d {}> /dev/null".format(current_file_path, current_folder)], shell=True)
+            os.remove(current_file_path)
+            downed_files = os.listdir(current_folder)
+            if "opacity" in "".join(downed_files).lower():
+                print(f"Removing {asset} assets because they have an opacity map.")
+                for f in downed_files:
+                    os.remove(os.path.join(current_folder, f))
+                # we leave the folder empty so that the
+                # asset won't be downloaded again
+        except HTTPError as err:
+            os.removedirs(current_folder)
+            print(f"\tFailed due to: {err}")
 
     print("Done downloading textures, saved in {}".format(cc_texture_dir))
 
