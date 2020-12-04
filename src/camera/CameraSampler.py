@@ -102,6 +102,8 @@ class CameraSampler(CameraInterface):
                            "Type: list. Default: []."
         "special_objects_weight", "Weighting factor for more special objects, used to estimate the interestingness of "
                                   "the scene. Type: float. Default: 2.0."
+        "hit_at_least_once", "Objects which need to be hit by at least one ray."
+                             "Only active inf min_interest_score is greater 0. Type: list. Default: []"
         "check_pose_novelty_rot", "Checks that a sampled new pose is novel with respect to the rotation component. "
                                   "Type: bool. Default: False"
         "check_pose_novelty_translation", "Checks that a sampled new pose is novel with respect to the translation "
@@ -162,6 +164,7 @@ class CameraSampler(CameraInterface):
         self.interest_score_step = config.get_float("interest_score_step", 0.1)
         self.special_objects = config.get_list("special_objects", [])
         self.special_objects_weight = config.get_float("special_objects_weight", 2)
+        self.hit_at_least_once = config.get_list("hit_at_least_once", [])
         self._above_objects = config.get_list("check_if_pose_above_object_list", [])
 
         # Set camera intrinsics
@@ -245,7 +248,8 @@ class CameraSampler(CameraInterface):
         if not self._perform_obstacle_in_view_check(cam, cam2world_matrix):
             return False
 
-        if self.min_interest_score > 0 and self._scene_coverage_score(cam, cam2world_matrix) < self.min_interest_score:
+        score = self._scene_coverage_score(cam, cam2world_matrix)
+        if self.min_interest_score > 0 and score < self.min_interest_score:
             return False
 
         if (self.check_pose_novelty_rot or self.check_pose_novelty_translation) and \
@@ -425,7 +429,6 @@ class CameraSampler(CameraInterface):
         # Compute vectors along both sides of the plane
         vec_x = frame[1] - frame[0]
         vec_y = frame[3] - frame[0]
-
         # Go in discrete grid-like steps over plane
         position = cam2world_matrix.to_translation()
         for x in range(0, self.sqrt_number_of_rays):
@@ -467,6 +470,11 @@ class CameraSampler(CameraInterface):
             # distribution of the objects in the scene
             scene_variance *= 1.0 - object_hit_value / float(num_of_rays)
         score = scene_variance * (score / float(num_of_rays))
+
+        # set score to zero if we didn't hit at least once
+        for object_class in self.hit_at_least_once:
+            if objects_hit[object_class] == 0:
+                return 0
         return score
 
     def _check_novel_pose(self, cam2world_matrix):
@@ -511,4 +519,4 @@ class CameraSampler(CameraInterface):
         self.var_rot = np.var(self.rotations)
         self.var_translation = np.var(self.translations)
 
-        return True 
+        return True
