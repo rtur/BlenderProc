@@ -225,3 +225,73 @@ class CameraUtility:
             [[fx, 0, cx],
              [0, fy, cy],
              [0, 0, 1]])
+
+    @staticmethod
+    def world_to_camera_view(scene, cam, cam2world_matrix, coord):
+        """
+        Returns the camera space coords (NDC) for a given 3d point.
+
+        Where (0, 0) is the bottom left and (1, 1)
+        is the top right of the camera frame.
+        values outside 0-1 are also supported.
+        A negative 'z' value means the point is behind the camera.
+
+        Takes shift-x/y, lens angle and sensor size into account
+        as well as perspective/ortho projections.
+
+        REIMPLEMENTATION (ALMOST COPY) OF THE IDENTICALLY NAMED FUNCTION IN
+        BPY_EXTRAS.OBJECT_UTILS WHICH DOESN'T USE THE MATRIX_WORLD OF THE
+        CAMERA, INSTEAD IT USES THE GIVEN MATRIX_WORLD MATRIX DIRECTLY.
+
+        :param scene: Scene to use for frame size.
+        :param cam: The camera object whose view frame is used (only intrinsics
+                    are relevant)
+        :param cam2world_matrix: Transformation matrix that transforms from the
+                                 camera space to the world space
+        :param coord: Wordl space location
+        :return: a vector where X and Y map to the view view plane and Z is the
+                 depth on the view axis.
+        """
+        from mathutils import Vector
+
+        co_local = cam2world_matrix.normalized().inverted() @ coord
+        z = -co_local.z
+
+        frame = [v for v in cam.view_frame(scene=scene)[:3]]
+
+        if cam.type != 'ORTHO':
+            if z == 0.0:
+                return Vector((0.5, 0.5, 0.0))
+            else:
+                frame = [-(v / (v.z / z)) for v in frame]
+
+        min_x, max_x = frame[2].x, frame[1].x
+        min_y, max_y = frame[1].y, frame[0].y
+
+        x = (co_local.x - min_x) / (max_x - min_x)
+        y = (co_local.y - min_y) / (max_y - min_y)
+
+        return Vector((x, y, z))
+
+    @staticmethod
+    def check_if_coord_in_frustum(scene, cam, cam2world_matrix, coord):
+        """
+        Check if the given coordinates are within the view frustum for
+        the given camera & cam2world_matrix
+
+        :param scene: Scene to use for frame size.
+        :param cam: The camera object whose view frame is used (only intrinsics are
+                    relevant)
+        :param cam2world_matrix: Transformation matrix that transforms from the
+                                 camera space to the world space
+        :param coord: The coordinates (in world space) to check
+        "return: True, if given coordinates are in the view frustum
+        """
+        co_ndc = CameraUtility.world_to_camera_view(scene, cam, cam2world_matrix, coord)
+        cs, ce = cam.clip_start, cam.clip_end
+        if (0.0 < co_ndc.x < 1.0 and
+            0.0 < co_ndc.y < 1.0 and
+            cs < co_ndc.z <  ce):
+            return True
+        else:
+            return False

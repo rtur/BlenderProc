@@ -104,6 +104,7 @@ class CameraSampler(CameraInterface):
                                   "the scene. Type: float. Default: 2.0."
         "hit_at_least_once", "Objects which need to be hit by at least one ray."
                              "Only active inf min_interest_score is greater 0. Type: list. Default: []"
+        "check_bbox_in_frustum", "A list of object categories for which the bounding box has to be in the view frustum. Default: []"
         "check_pose_novelty_rot", "Checks that a sampled new pose is novel with respect to the rotation component. "
                                   "Type: bool. Default: False"
         "check_pose_novelty_translation", "Checks that a sampled new pose is novel with respect to the translation "
@@ -165,6 +166,7 @@ class CameraSampler(CameraInterface):
         self.special_objects = config.get_list("special_objects", [])
         self.special_objects_weight = config.get_float("special_objects_weight", 2)
         self.hit_at_least_once = config.get_list("hit_at_least_once", [])
+        self.check_bbox_in_frustum = config.get_list("check_bbox_in_frustum", [])
         self._above_objects = config.get_list("check_if_pose_above_object_list", [])
 
         # Set camera intrinsics
@@ -183,7 +185,7 @@ class CameraSampler(CameraInterface):
 
         if self.min_interest_score == self.interest_score_range:
             step_size = 1
-        else:    
+        else:
             step_size = (self.interest_score_range - self.min_interest_score) / self.interest_score_step
             step_size += 1  # To include last value
         # Decreasing order
@@ -248,6 +250,9 @@ class CameraSampler(CameraInterface):
         if not self._perform_obstacle_in_view_check(cam, cam2world_matrix):
             return False
 
+        if not self._perform_frustum_visibility_check(cam, cam2world_matrix):
+            return False
+
         score = self._scene_coverage_score(cam, cam2world_matrix)
         if self.min_interest_score > 0 and score < self.min_interest_score:
             return False
@@ -301,6 +306,43 @@ class CameraSampler(CameraInterface):
         self.bvh_tree = mathutils.bvhtree.BVHTree.FromBMesh(bm)
 
         self._is_bvh_tree_inited = True
+
+    def _perform_frustum_visibility_check(self, cam, cam2world_matrix):
+        """
+        For each "category_id" in "check_bbox_in_frustum" check whether
+        the bounding box for the corresponding mesh objects lies completely
+        within the view frustum for the given camera and cam2world_matrix.
+
+        :param cam: The camera whose view frame is used (only intrinsics
+                    relevant, pose of cam is ignored).
+        :param cam2world_matrix: Transformation matrix that transforms from the
+                                 camera space to the world space.
+        :return: True, if all objects corresponding to the category ids in the
+                       "check_bbox_in_frustum" list lie within the
+                       view frustum.
+        """
+        for obj in get_all_mesh_objects():
+            if "category_id" not in obj:
+                continue
+            objclass = obj["category_id"]
+            if objclass not in self.check_bbox_in_frustum:
+                continue
+
+            bbox_vertices = [v[:] for v in obj.bound_box]
+            for v in bbox_vertices:
+                v_wc = obj.matrix_world @ v
+
+                in_frustum = \
+                    CameraUtility.check_if_coord_in_frustum(
+                        bpy.context.scene,
+                        cam,
+                        cam2world_matrix,
+                        v_wc
+                    )
+                if not in_frustum:
+                    return False
+        return True
+
 
     def _perform_obstacle_in_view_check(self, cam, cam2world_matrix):
         """ Check if there is an obstacle in front of the camera which is less than the configured
