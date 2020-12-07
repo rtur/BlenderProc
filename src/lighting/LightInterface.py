@@ -5,7 +5,7 @@ from src.utility.ItemCollection import ItemCollection
 
 
 class LightInterface(Module):
-    """ 
+    """
     **Configuration**:
 
     .. csv-table::
@@ -28,6 +28,7 @@ class LightInterface(Module):
        "distance", "Falloff distance of the light = point where light is half the original intensity.
                    "Type: float. Default: 0. Range: [0, inf]"
        "energy", "Intensity of the emission of a light source. Type: float. Default: 10."
+       "shadow_soft_size", "Light size for ray shadow sampling. Default: 0.25."
        "type", "The type of a light source. Type: string. Default: POINT. Available: [POINT, SUN, SPOT, AREA]"
     """
 
@@ -51,4 +52,5 @@ class LightInterface(Module):
         light_obj.rotation_euler = config.get_list("rotation", [0, 0, 0])
         light_data.energy = config.get_float("energy", 10.)
         light_data.color = config.get_list("color", [1, 1, 1])[:3]
+        light_data.shadow_soft_size = config.get_float("shadow_soft_size", 0.25)
         light_data.distance = config.get_float("distance", 0)
