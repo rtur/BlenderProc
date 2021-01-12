@@ -6,6 +6,7 @@ import lz4.frame as lz4
 import pickle
 
 from src.writer.WriterInterface import WriterInterface
+from src.writer.FileLock import FileLock
 
 
 class PickleWriter(WriterInterface):
@@ -31,72 +32,76 @@ class PickleWriter(WriterInterface):
         self._avoid_rendering = config.get_bool("avoid_rendering", False)
         self._ext = ".pickle.lz4"
 
+        self._lockpath = \
+            os.path.join(self._determine_output_dir(False), "lockfile")
+
     def run(self):
-        if self._avoid_rendering:
-            print("Avoid rendering is on, no output produced!")
-            return
-
-        if self.config.get_bool("append_to_existing_output", False):
-            frame_offset = 0
-            # Look for pickle file with highest index
-            for path in os.listdir(self._determine_output_dir(False)):
-                if path.endswith(self._ext):
-                    index = path[:-len(self._ext)]
-                    if index.isdigit():
-                        frame_offset = max(frame_offset, int(index) + 1)
-        else:
-            frame_offset = 0
-
-        # Go through all frames
-        for frame in range(bpy.context.scene.frame_start, bpy.context.scene.frame_end):
-
-            pickle_path = os.path.join(self._determine_output_dir(False),
-                                       f"{frame+frame_offset:06d}{self._ext}")
-            scene_dct = {}
-            if 'output' not in bpy.context.scene:
-                print("No output was designed in prior models!")
+        with FileLock(self._lockpath):
+            if self._avoid_rendering:
+                print("Avoid rendering is on, no output produced!")
                 return
-            # Go through all the output types
-            print("Merging data for frame " + str(frame) + " into " + pickle_path)
 
-            for output_type in bpy.context.scene["output"]:
-                use_stereo = output_type["stereo"]
-                # Build path (path attribute is format string)
-                file_path = output_type["path"]
-                if '%' in file_path:
-                    file_path = file_path % frame
+            if self.config.get_bool("append_to_existing_output", False):
+                frame_offset = 0
+                # Look for pickle file with highest index
+                for path in os.listdir(self._determine_output_dir(False)):
+                    if path.endswith(self._ext):
+                        index = path[:-len(self._ext)]
+                        if index.isdigit():
+                            frame_offset = max(frame_offset, int(index) + 1)
+            else:
+                frame_offset = 0
 
-                if use_stereo:
-                    path_l, path_r = self._get_stereo_path_pair(file_path)
+            # Go through all frames
+            for frame in range(bpy.context.scene.frame_start, bpy.context.scene.frame_end):
 
-                    img_l, new_key, new_version = self._load_and_postprocess(path_l, output_type["key"],
-                                                                               output_type["version"])
-                    img_r, new_key, new_version = self._load_and_postprocess(path_r, output_type["key"],
-                                                                               output_type["version"])
+                pickle_path = os.path.join(self._determine_output_dir(False),
+                                           f"{frame+frame_offset:06d}{self._ext}")
+                scene_dct = {}
+                if 'output' not in bpy.context.scene:
+                    print("No output was designed in prior models!")
+                    return
+                # Go through all the output types
+                print("Merging data for frame " + str(frame) + " into " + pickle_path)
 
-                    if self.config.get_bool("stereo_separate_keys", False):
-                        scene_dct[new_key + "_0"] = img_l
-                        scene_dct[new_key + "_1"] = img_r
+                for output_type in bpy.context.scene["output"]:
+                    use_stereo = output_type["stereo"]
+                    # Build path (path attribute is format string)
+                    file_path = output_type["path"]
+                    if '%' in file_path:
+                        file_path = file_path % frame
+
+                    if use_stereo:
+                        path_l, path_r = self._get_stereo_path_pair(file_path)
+
+                        img_l, new_key, new_version = self._load_and_postprocess(path_l, output_type["key"],
+                                                                                   output_type["version"])
+                        img_r, new_key, new_version = self._load_and_postprocess(path_r, output_type["key"],
+                                                                                   output_type["version"])
+
+                        if self.config.get_bool("stereo_separate_keys", False):
+                            scene_dct[new_key + "_0"] = img_l
+                            scene_dct[new_key + "_1"] = img_r
+                        else:
+                            data = np.array([img_l, img_r])
+                            scene_dct[new_key] = data
+
                     else:
-                        data = np.array([img_l, img_r])
+                        data, new_key, new_version = \
+                                self._load_and_postprocess(
+                                        file_path, output_type["key"],
+                                        output_type["version"])
+
                         scene_dct[new_key] = data
 
-                else:
-                    data, new_key, new_version = \
-                            self._load_and_postprocess(
-                                    file_path, output_type["key"],
-                                    output_type["version"])
+                    scene_dct[new_key + "_version"] = new_version
 
-                    scene_dct[new_key] = data
-
-                scene_dct[new_key + "_version"] = new_version
-
-            with open(pickle_path, "wb") as f:
-                data = pickle.dumps(scene_dct)
-                data = lz4.compress(
-                        data,
-                        compression_level=lz4.COMPRESSIONLEVEL_MINHC)
-                f.write(data)
+                with open(pickle_path, "wb") as f:
+                    data = pickle.dumps(scene_dct)
+                    data = lz4.compress(
+                            data,
+                            compression_level=lz4.COMPRESSIONLEVEL_MINHC)
+                    f.write(data)
 
     def _get_stereo_path_pair(self, file_path):
         """
