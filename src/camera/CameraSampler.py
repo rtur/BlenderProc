@@ -330,8 +330,7 @@ class CameraSampler(CameraInterface):
 
             bbox_vertices = [v[:] for v in obj.bound_box]
             for v in bbox_vertices:
-                v_wc = obj.matrix_world @ v
-
+                v_wc = obj.matrix_world @ mathutils.Vector(v)
                 in_frustum = \
                     CameraUtility.check_if_coord_in_frustum(
                         bpy.context.scene,

@@ -289,8 +289,6 @@ class CameraUtility:
         """
         co_ndc = CameraUtility.world_to_camera_view(scene, cam, cam2world_matrix, coord)
         cs, ce = cam.clip_start, cam.clip_end
-        # TODO: sometimes the coordinates aren't in the rendered scene
-        #       even though they are in frustum.
         if (0.0 < co_ndc.x < 1.0 and
             0.0 < co_ndc.y < 1.0 and
             cs < co_ndc.z <  ce):
