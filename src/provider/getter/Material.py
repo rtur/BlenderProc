@@ -6,7 +6,8 @@ import mathutils
 from src.main.Provider import Provider
 from src.utility.BlenderUtility import get_all_materials
 from src.utility.Utility import Utility
-
+from src.provider.getter.Entity import Entity as EntityGetter
+from src.utility.Config import Config
 
 class Material(Provider):
     """  Returns a list of materials that comply with defined conditions.
@@ -90,6 +91,7 @@ class Material(Provider):
                                                   "nodes inside of the material. Suffix 'min' = less nodes or equal"
                                                   "than specified, 'max' = at least as many or 'eq' = for this exact"
                                                   "amount of principled bsdf nodes. Type: int."
+        "cf_from_entities", "take materials from entities. Type: [entities]"
     """
 
     def __init__(self, config):
@@ -201,6 +203,18 @@ class Material(Provider):
                                     break
                             else:
                                 raise Exception("This type of key is unknown: {}".format(key))
+                        else:
+                            select_material = False
+                            break
+                    elif key.startswith("from_entities"):
+                        if material.use_nodes:
+                            cfg = Config(value)
+                            entities = EntityGetter(cfg).run()
+                            select_material = False
+                            for ent in entities:
+                                if material.name in ent.material_slots.keys():
+                                    select_material = True
+                                    break
                         else:
                             select_material = False
                             break
