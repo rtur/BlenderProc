@@ -3,6 +3,7 @@ import os
 import bpy
 import numpy as np
 import lz4.frame as lz4
+import cv2
 import pickle
 
 from src.writer.WriterInterface import WriterInterface
@@ -95,6 +96,12 @@ class PickleWriter(WriterInterface):
                         scene_dct[new_key] = data
 
                     scene_dct[new_key + "_version"] = new_version
+
+                for k in list(scene_dct.keys()):
+                    if k == "distance":
+                        scene_dct[k] = scene_dct[k].astype(np.float16)
+                    elif k in ["colors", "segmap"]:
+                        scene_dct[k] = cv2.imencode('.png', scene_dct[k])[1]
 
                 with open(pickle_path, "wb") as f:
                     data = pickle.dumps(scene_dct)
