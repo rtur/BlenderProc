@@ -3,6 +3,8 @@ import warnings
 
 import bpy
 
+import random
+
 from src.main.Module import Module
 from src.utility.Config import Config
 from src.utility.Utility import Utility
@@ -107,6 +109,10 @@ class MaterialManipulator(Module):
         "cf_set_*", "Sets value to the * (suffix) input of the Principled BSDF shader. Replace * with all lower-case "
                     "name of the input (use '_' if those are represented by multiple nodes, e.g. 'Base Color' -> "
                     "'base_color'). Also deletes any links to this shader's input point. Type: int, float, list, Vector."
+        "cf_randomize/textures", "Any texture node available for shading in blender, will be instantiated"
+                                 "as e.g. ShaderNodeTexVoronoi default: [Voronoi, Magic, Brick]"
+        "cf_randomize/output_key", "available: ['Base Color', 'Displacement'] default: 'Base Color'"
+        "cf_randomize/*", "any params available for one of the selected texture nodes"
     """
 
     def __init__(self, config):
@@ -167,6 +173,8 @@ class MaterialManipulator(Module):
                 elif key_copy == "textures" and requested_cf:
                     loaded_textures = self._load_textures(value)
                     self._set_textures(loaded_textures, material)
+                elif key_copy == "randomize":
+                    self._randomize(material=material, cfg=value)
                 elif key_copy == "switch_to_emission_shader" and requested_cf:
                     self._switch_to_emission_shader(material, value)
                 elif "set_" in key_copy and requested_cf:
@@ -195,6 +203,8 @@ class MaterialManipulator(Module):
                 for text_key in paths_conf.data.keys():
                     text_path = paths_conf.get_string(text_key)
                     result.update({text_key: text_path})
+            elif key == "cf_randomize":
+                result = Config(params_conf.get_raw_dict(key))
             elif key == "cf_switch_to_emission_shader":
                 result = {}
                 emission_conf = Config(params_conf.get_raw_dict(key))
@@ -225,6 +235,43 @@ class MaterialManipulator(Module):
             loaded_textures.update({key: bpy.data.images.get(os.path.basename(text_paths[key]))})
 
         return loaded_textures
+
+    def _randomize(self, material, cfg):
+        textures = cfg.get_list("textures", ["Voronoi", "Checker", "Magic"])
+        output_key = cfg.get_string("output_key", "Base Color")
+        assert output_key in ["Base Color", "Displacement"]
+
+        # build node
+        nodes = material.node_tree.nodes
+        links = material.node_tree.links
+
+        texture_name = random.choice(textures)
+        node = nodes.new(f"ShaderNodeTex{texture_name}")
+        for k, v in node.inputs.items():
+            if k not in cfg.data.keys():
+                continue
+            if v.type == "VALUE":
+                v.default_value = cfg.get_float(k)
+            elif v.type == "RGBA":
+                v.default_value = cfg.get_list(k)
+            else:
+                raise RuntimeError(f"Unknown value type: {v.type}")
+
+        out_point = node.outputs["Color"]
+        if output_key == "Base Color":
+            contrast_node = nodes.new("ShaderNodeBrightContrast")
+            contrast_node.inputs["Contrast"].default_value = cfg.get_float("Contrast", 1.0)
+            contrast_node.inputs["Bright"].default_value = cfg.get_float("Bright", 0.0)
+            in_point = contrast_node.inputs["Color"]
+            links.new(out_point, in_point)
+            out_point = contrast_node.outputs["Color"]
+            in_point = nodes["Principled BSDF"].inputs[output_key]
+        elif output_key == "Displacement":
+            in_point = nodes["Material Output"].inputs[output_key]
+        else:
+            raise RuntimeError("Output key should be either 'Base Color' or 'Displacement'")
+
+        links.new(out_point, in_point)
 
     def _set_textures(self, loaded_textures, material):
         """ Creates a ShaderNodeTexImage node, assigns a loaded image to it and connects it to the shader of the
